@@ -1,0 +1,9 @@
+@echo off
+echo Installing dependencies...
+python -m pip install torch numpy onnx onnxruntime librosa opencv-python mediapipe sounddevice fastapi uvicorn pydantic
+
+echo Training model...
+python scripts/train_and_export.py
+
+echo Starting server...
+python app/main.py
