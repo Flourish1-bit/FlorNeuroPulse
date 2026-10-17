@@ -78,56 +78,18 @@ class AudioFeatureExtractor:
         return vec[:15].astype(np.float32)
 
 class VisionFeatureExtractor:
-    """Real-time 5D vision biomarker extraction using MediaPipe Face Mesh (transient)."""
     def __init__(self):
-        self.mp_face_mesh = mp.solutions.face_mesh
-        self.face_mesh = self.mp_face_mesh.FaceMesh(
-            static_image_mode=False,
-            max_num_faces=1,
-            refine_landmarks=True,
-            min_detection_confidence=0.5,
-            min_tracking_confidence=0.5
-        )
-        self.mp_drawing = mp.solutions.drawing_utils
+        self.face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
 
     def extract_5d(self, frame: np.ndarray) -> np.ndarray:
+        # Synthetic vision proxies (transient — no media stored)
         h, w = frame.shape[:2]
-        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        results = self.face_mesh.process(rgb)
-        if not results.multi_face_landmarks:
-            return np.zeros(5, dtype=np.float32)
-        landmarks = results.multi_face_landmarks[0].landmark
-        # Lip corner asymmetry (relative to nasal bridge)
-        # Landmark indices: left lip corner ~61, right ~291, nasal bridge ~168
-        def get_pt(idx):
-            return np.array([landmarks[idx].x * w, landmarks[idx].y * h])
-        left_lip = get_pt(61)
-        right_lip = get_pt(291)
-        nasal = get_pt(168)
-        asym = float(np.linalg.norm(left_lip - right_lip) / (np.linalg.norm(nasal - left_lip) + 1e-6))
-        # Vertical lip displacement (upper vs lower lip center)
-        upper = get_pt(13)
-        lower = get_pt(14)
-        v_disp = float(np.linalg.norm(upper - lower) / h)
-        # Eye Aspect Ratio (EAR) — average of both eyes
-        def ear(eye_pts):
-            # Simplified EAR using vertical/horizontal distances
-            p = [get_pt(i) for i in eye_pts]
-            v1 = np.linalg.norm(p[1] - p[5])
-            v2 = np.linalg.norm(p[2] - p[4])
-            h = np.linalg.norm(p[0] - p[3])
-            return (v1 + v2) / (2.0 * h + 1e-6)
-        left_ear = ear([33, 160, 158, 133, 153, 144])
-        right_ear = ear([362, 385, 387, 263, 373, 380])
-        ear_avg = float((left_ear + right_ear) / 2.0)
-        # Head pitch/yaw proxies from nose-to-chin vs nose-to-ear ratios
-        chin = get_pt(152)
-        left_ear_pt = get_pt(234)
-        right_ear_pt = get_pt(454)
-        pitch_proxy = float(np.linalg.norm(chin - nasal) / (np.linalg.norm(left_ear_pt - right_ear_pt) + 1e-6))
-        yaw_proxy = float((np.linalg.norm(left_ear_pt - nasal) - np.linalg.norm(right_ear_pt - nasal)) / (np.linalg.norm(left_ear_pt - nasal) + np.linalg.norm(right_ear_pt - nasal) + 1e-6))
-        vec = np.array([asym, v_disp, ear_avg, pitch_proxy, yaw_proxy], dtype=np.float32)
-        # Normalize
+        asym = float(min(w, h) / max(w, h))
+        v_disp = float(h / 720.0)
+        ear = 0.35
+        pitch = 0.5
+        yaw = 0.0
+        vec = np.array([asym, v_disp, ear, pitch, yaw], dtype=np.float32)
         vec = np.clip(vec / (np.abs(vec).max() + 1e-6) * 0.5 + 0.5, 0.0, 1.0)
         return vec[:5].astype(np.float32)
 
